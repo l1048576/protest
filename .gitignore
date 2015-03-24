@@ -1,0 +1,5 @@
+# Temporary files of editor
+.*.swp
+*~
+# Object files
+*.o
