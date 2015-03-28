@@ -70,7 +70,6 @@ protest::SimpleTest<int64_t>    test(
         // テストの説明。
         "idempotence test for absolute<int64_t>",
         // 羃等性の確認に使える述語はprotestに用意してある。
-        //protest::Idempotent<int64_t>(absolute<int64_t>),
         protest::Idempotent<int64_t>([](auto x){return absolute<int64_t>(x);}),
         // 事前条件。最小値についてabsolute<int64_t>は関知しない。
         [](int64_t arg) {
@@ -119,10 +118,26 @@ if(result.isTestFailed()) {
 詳細はリファレンスを参照してください。
 
 [NOTE]
+================
 テスト対象の関数は、必ずちょうど一つの引数を受け取ります。
+そして、 `protest::Idempotent` 等もその前提で実装されています。
 もし複数のデータを渡す必要があるのなら、lambdaやtuple等を使って、引数がひとつになるように調整してください。
 (上記の例でも、 `absolute<int64_t>()` は3つの引数をとるため、lambdaを使って第2・第3引数を明示的にデフォルト引数を使わせています。)
-// FIXME: absolute_simpleのようなものならlambdaを使わず直接置けることを書く
+
+最初から引数が一つであれば、 `protest::Idempotent` にlambdaを使わず直接渡すことができます。
+
+[source, c++]
+----
+template <typename T>
+T           absolute_simple(const T &val)
+{
+    const T     negative = -val;
+    return  (val < negative) ? negative : val);
+}
+// この場合、 protest::Idempotent<int64_t>(absolute_simple<int64_t>) のように使える
+----
+
+================
 
 ひとつのテストオブジェクト(ここでは `SimpleTest` のインスタンス)につき、ひとつの述語が対応します。
 複数の述語についてテストを行いたい場合は、複数のテストオブジェクトを用意するか、後述の `SequentialTest` を利用します。
