@@ -43,17 +43,11 @@ namespace   protest = nu11p0::protest;
 // functional: std::less<>, std::negate<>
 #include <functional>
 template <typename T, typename Less=std::less<T>, typename Negate=std::negate<T>>
-T           absolute(const T &val)
+T           absolute(const T &val, Less l=Less(), Negate n=Negate())
 {
     const T     negative = n(val);
     return  (l(val, negative) ? negative : val);
 }
-//template <typename T, typename Less=std::less<T>, typename Negate=std::negate<T>>
-//T           absolute(const T &val)
-//{
-    //const T     negative = Negate()(val);
-    //return  (Less()(val, negative) ? negative : val);
-//}
 ----
 という関数についてテストを行う場合の例を用いて、protestの機能を説明します。
 
