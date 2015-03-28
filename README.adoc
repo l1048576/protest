@@ -187,7 +187,7 @@ T           absolute_simple(const T &val)
 
 [source, c++]
 ----
-// absolute<T> について、T が全ての整数型と float の場合の羃等性を確認する。
+// absolute<T> について、T が全ての整数型と浮動小数型の場合の羃等性を確認する。
 using   TypesToCheck = protest::tuple_cat_t<protest::Integers, protest::Floats>;
 // 以下のようにしてもおｋ。
 //using   TypesToCheck = protest::tuple_append_t<protest::Integers, float, double, long double>;
