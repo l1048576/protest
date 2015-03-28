@@ -114,16 +114,6 @@ class	SimpleTest {
 			}
 			return	res;
 		}
-		//TestResult		runTest(size_t maxCount)
-		//{
-			//// FIXME: unimplemented.
-			//return	TestResult();
-		//}
-		//template <typename TCG>
-		//TestResult		runTest(TCG testcaseGenerator, size_t maxCount)
-		//{
-			//return	TestResult();
-		//}
 }; // class SimpleTest
 
 } // namespace protest
