@@ -7,7 +7,7 @@ AC_INIT([libprotest], [0.0.1], [nu11p0.6477@gmail.com])
 AC_CONFIG_MACRO_DIRS([m4])
 
 AM_INIT_AUTOMAKE([-Wall foreign subdir-objects])
-AC_CONFIG_SRCDIR([protest.cpp])
+AC_CONFIG_SRCDIR([config.h.in])
 
 dnl # This library depends on C++14 features, so you may want to use
 dnl # clang++ and libcpp instead of g++ and libstdc++.
@@ -27,7 +27,7 @@ AC_ARG_ENABLE(
 		[no], [debug=false],
 		[
 			debug=true
-			AC_MSG_WARN([bad value ${enableval} for --enable-debug, using --enable-debug=yes])
+			AC_MSG_WARN([bad value ${enableval} for --enable-debug. using --enable-debug=yes])
 		]
 	),
 	[debug=false])
@@ -56,6 +56,8 @@ AM_COND_IF([HAVE_DOXYGEN], [AC_CONFIG_FILES([docs/Doxyfile])])
 # Checks for libraries.
 
 # Checks for header files.
+
+AC_CONFIG_HEADERS([config.h])
 
 dnl # use boost::any until compilers support std::experimental::any.
 AC_LANG_PUSH([C++])

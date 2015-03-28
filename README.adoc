@@ -1,0 +1,330 @@
+:icons: font
+:source-highlighter: pygments
+
+= protest
+
+== 概要
+protestは、{cpp}においてテストを簡潔に記述することを目的として開発されたライブラリです。
+// TODO: TMP向けのやつは未実装。
+//普通のテストはもちろん、テストケース自動生成、テンプレート関数のテスト、TMP
+//(Template Meta Programming、型を利用したコンパイル時計算)向けのテストなども可能です。
+普通のテストはもちろん、テストケース自動生成、テンプレート関数のテストなども可能です。
+
+{cpp}11以降の機能をフルに活用できるよう設計されており、記述にはlambdaなどを多用します。
+また、マクロを極力利用しないようになっており、{cpp}の文法の中で直観的にテストを記述できます。
+
+== Requirements
+
+- {cpp}14対応環境(コンパイラと、標準ライブラリ)
+- `std::optional`, `std::experimental::optional`, `boost::optional` のいずれか
+- `std::any`, `std::experimental::any`, `boost::any` のいずれか
+
+== 機能と利用例
+
+以下のソース例の全てで、最初に
+[source, c++]
+----
+using namespace nu11p0;
+----
+または
+[source, c++]
+----
+namespace   protest = nu11p0::protest;
+----
+してあると考えてください。
+また、必要なヘッダは適宜includeしてください。
+
+=== テスト
+
+以下では、
+[source, c++]
+----
+// functional: std::less<>, std::negate<>
+#include <functional>
+template <typename T, typename Less=std::less<T>, typename Negate=std::negate<T>>
+T           absolute(const T &val)
+{
+    const T     negative = n(val);
+    return  (l(val, negative) ? negative : val);
+}
+//template <typename T, typename Less=std::less<T>, typename Negate=std::negate<T>>
+//T           absolute(const T &val)
+//{
+    //const T     negative = Negate()(val);
+    //return  (Less()(val, negative) ? negative : val);
+//}
+----
+という関数についてテストを行う場合の例を用いて、protestの機能を説明します。
+
+==== 単純なテスト
+
+まず、単にひとつの型についてテストしてみましょう。
+`absolute<int64_t>(int64_t)` が満たすべき条件は以下の2つです。
+
+- 戻り値が非負であること
+- 羃等(つまり、関数を二度以上適用した結果は、単に一度だけ適用した結果と同じ)であること
+
+しかし、{cpp}では符号付き整数の最小値の符号を逆にしても正しい結果になるとは限りません。
+よって、「 *引数が負の最小値* (別の言い方をすると、 *負の数のうち絶対値が最大のもの* ) *でないこと* 」、
+これが *事前条件* (precondition) となります。
+
+[source, c++]
+----
+// absolute<int64_t> について、羃等性を確認する。
+protest::SimpleTest<int64_t>    test(
+        // テストの説明。
+        "idempotence test for absolute<int64_t>",
+        // 羃等性の確認に使える述語はprotestに用意してある。
+        //protest::Idempotent<int64_t>(absolute<int64_t>),
+        protest::Idempotent<int64_t>([](auto x){return absolute<int64_t>(x);}),
+        // 事前条件。最小値についてabsolute<int64_t>は関知しない。
+        [](int64_t arg) {
+            return (arg != std::numeric_limits<int64_t>::min());
+        }
+    );
+
+// エッジケース最大20個についてテストを実行する。
+auto        result = test.runTest(
+        // テストケースの説明。
+        "edge case",
+        // テストケース生成器。
+        protest::case_gen::Edge<int64_t>(),
+        // 利用するテストケースの最大個数。
+        20,
+        // 実行情報の出力。時間がかかる場合などに進捗が表示される。省略可。
+        std::cout);
+// テストの実行結果の出力。
+printResult(std::cout, result);
+if(result.isTestFailed()) {
+    // 失敗した場合はテストケースを表示して終了。
+    std::cout << "     | failed case: " << protest::ns_any::any_cast<int64_t>(result.failedCase()) << std::endl;
+    std::exit(1);
+}
+// テストオブジェクトが記憶しているテスト結果をリセットする。
+test.clearAll();
+
+// ランダムに生成されたテストケース最大100個についてテストを実行する。
+result = test.runTest("random case", protest::case_gen::Random<int64_t>(), 100, std::cout);
+printResult(std::cout, result);
+if(result.isTestFailed()) {
+    std::cout << "     | failed case: " << protest::ns_any::any_cast<int64_t>(result.failedCase) << std::endl;
+    std::exit(2);
+}
+----
+
+出力は以下のようになります。
+
+----
+[PASS] Idempotence test for absolute<int64_t> (with test case: random case) (pass=20, skip=0)
+[PASS] Idempotence test for absolute<int64_t> (with test case: edge case) (pass=8, skip=1)
+----
+
+[NOTE]
+事前条件、実行情報の出力先などは省略可能です。
+詳細はリファレンスを参照してください。
+
+[NOTE]
+テスト対象の関数は、必ずちょうど一つの引数を受け取ります。
+もし複数のデータを渡す必要があるのなら、lambdaやtuple等を使って、引数がひとつになるように調整してください。
+(上記の例でも、 `absolute<int64_t>()` は3つの引数をとるため、lambdaを使って第2・第3引数を明示的にデフォルト引数を使わせています。)
+// FIXME: absolute_simpleのようなものならlambdaを使わず直接置けることを書く
+
+ひとつのテストオブジェクト(ここでは `SimpleTest` のインスタンス)につき、ひとつの述語が対応します。
+複数の述語についてテストを行いたい場合は、複数のテストオブジェクトを用意するか、後述の `SequentialTest` を利用します。
+
+[WARNING]
+// TODO
+`SequentialTest` は未実装。
+
+同じテストを複数のテストケース(生成器)について実行したいときには、テストオブジェクトを使い回すことができます。
+
+[[simpletest-param-table]]
+[options=header]
+|========================================================================
+| 指定する情報       | 種類             | 指定するタイミング       | 省略
+| 事前条件           | 関数オブジェクト | テストオブジェクト生成時 | 可
+| 述語               | 関数オブジェクト | テストオブジェクト生成時 | 不可
+| テストケース生成器 | 関数オブジェクト | テスト実行時             | 不可
+|========================================================================
+
++pass+ は指定された条件を満たしたテストケースの数、 +skip+ は事前条件を満たさずテストに用いられなかったテストケースの数です。
+出力の2行目で `skip=1` となっていることから、テストケース生成器 `protest::case_gen::Edge<int64_t>` が `std::numeric_limits<int64_t>::min()`
+をテストケースとして提示し、それが事前条件 `arg != std::numeric_limits<int64_t>::min()` を満たさないとしてスキップされたことがわかります。
+
+テストが失敗した場合は即座に中断されるため、失敗はカウントされません。
+
+テストに時間がかかる場合は、 `runTest` メンバ関数の第4引数を指定した場合のみ進捗が出力されます。
+しかし、テストの結果は自動では出力されません。
+`printResult` 関数で出力できますが、フォーマットが気に入らないのであれば、自分で別の関数を用意しても構いません。
+`runTest` が返す `TestResult` 構造体は、全てのメンバがpublicです。
+
+失敗したテストの詳細は、 `runTest` と `printResult` のいずれでも詳細は出力されません。
+これは、テストケースの型がテストごとに異なるにも関わらず、テストの結果が常に `TestResult` 型に保存されるためです。
+失敗したテストケースは `std::any` や `boost::any` などの型( `protest::ns_any::any`
+として抽象化されています)に保存されているため、テストケースの型を把握しているはずの `runTest` 呼び出し側のコードで、
+`protest::ns_any::any_cast<Type>` を用いて適切にキャストし、扱ってください。
+
+また、スキップされたテストケースについても情報は保存されません。
+知りたいのであれば、渡してやる事前条件の中で保持なり出力なりする必要があります。
+
+==== テンプレート関数の、複数の型についてのテスト
+
+`absolute<int64_t>` だけでなく、
+`int8_t`, `uint8_t`, `int16_t`, `uint16_t`, `int32_t`, `uint32_t`, `int64_t`, `uint64_t`
+など全ての整数型、更には
+`float`, `double`, `long double`
+についてテストしたい場合もあるでしょう。
+
+[source, c++]
+----
+// absolute<T> について、T が全ての整数型と float の場合の羃等性を確認する。
+using   TypesToCheck = protest::tuple_cat_t<protest::Integers, protest::Floats>;
+// 以下のようにしてもおｋ。
+//using   TypesToCheck = protest::tuple_append_t<protest::Integers, float, double, long double>;
+
+// 戻り値は protest::TestResult ではなく、 protest::SequentialTestResult になることに留意せよ。
+auto        result = protest::generic::test<
+        // テストケース生成器。
+        // エッジケース生成器も protest::generic::Edge を指定することで利用できる。
+        protest::generic::Random
+        // テストする引数の型のリスト(タプル)。
+        , TypesToCheck
+    >(
+        // テストの説明。
+        "absolute<T>() template function positivity test"
+        // テストケースの説明。
+        , "random case"
+        // 述語。
+        , [](auto x) {
+            return protest::AssertResult((absolute(x) >= 0), "return value is still negative");
+        }
+        // 事前条件。
+        , protest::overload(
+            // 符号付き整数型の場合は、最小値でないことを確認する。
+            [](auto x) -> std::enable_if_t<std::is_integral<decltype(x)>{} && std::is_signed<decltype(x)>{}, bool>
+            {
+                return  (x != std::numeric_limits<decltype(x)>::min());
+            }
+            // 浮動小数点数の場合は、NaNでないことを確認する。
+            // (つまり、正規化数、非正規化数、ゼロ、無限大については処理を行う。)
+            , [](auto x) -> std::enable_if_t<std::is_floating_point<decltype(x)>{}, bool>
+            {
+                return  !std::isnan(x);
+            }
+            , [](auto)
+            {
+                return  true;
+            }
+        }
+        // 利用するテストケースの最大個数。
+        , 50
+        // 実行情報の出力。時間がかかる場合などに進捗が表示される。省略可。
+        // 省略した場合、次に指定する結果表示用の関数は用いられない(呼び出されない)。
+        , std::cout
+        // 結果表示用の関数。省略した場合 protest::printResult が用いられる。省略可。
+        //, protest::printResult
+    );
+
+// テストの実行結果の出力は既に generic::test() 内でされているため不要。
+if(result.result.isTestFailed()) {
+    std::cout << "     | failed case: ";
+    protest::passAsNthType<Nums>(
+            protest::overload(
+                    [](auto x) -> std::enable_if_t<std::is_floating_point<decltype(x)>{}, void> {
+                        std::cout << "(floating point)(" << x << ')';
+                    }
+                    , [](auto x) -> std::enable_if_t<std::is_integral<decltype(x)>{} && std::is_signed<decltype(x)>{}, void> {
+                        std::cout << "(signed integral)(" << x << ')';
+                    }
+                    , [](auto x) {
+                        std::cout << "(unsigned integral)(" << x << ')';
+                    }
+                )
+            , result.result.failedCase
+            , result.failedIndex);
+    std::cout << std::endl;
+    std::exit(1);
+}
+// テスト結果をリセットする。
+result.clearAll();
+
+----
+
+[NOTE]
+================
+`protest::Integers` は、有効な全てのサイズのsigned/unsignedの整数型のタプルです。
+より具体的には、 `uintN_t` と `intN_t` (+N+ は8, 16, 32, 64のいずれか)により指定されているため、これらの型が定義されていない環境においては正しく動作しません。
+(とはいえ、そんな環境は滅多に存在しないでしょうし、{cpp}14対応があるほどしっかりしたコンパイラなら心配は要りません。)
+
+64ビット変数が使えない場合、たとえば `uint64_t` が存在しない環境であれば、コンパイル時(正確にはプリプロセス時)に検出して、
+`protest::Integers` には含まれなくなります。
+これは `int64_t` についても同じことです。
+ただし、 `__uint128_t` などのコンパイラ拡張は検出も利用もされません。
+
++protest+ で用意されているのが当てにならないというのであれば、悩むよりも、さっさと自分の使いたい型を集めたtupleを作ってしまいましょう。
+
+================
+
+`protest::generic::test` はテンプレート関数であり、テストオブジェクトなしに直接テストが実行されることに注目してください。
+
+[options=header]
+|==============================================================
+| 指定する情報             | 種類                        | 省略
+| テストケース生成器       | テンプレート                | 不可
+| テストケースの型のリスト | `std::tuple` の(値でなく)型 | 不可
+| 事前条件                 | 関数オブジェクト            | 不可
+| 述語                     | 関数オブジェクト            | 不可
+|==============================================================
+
+xref:simpletest-param-table[`SimpleTest` の場合]と異なり、事前条件を省略することはできません。
+事前条件が不要な場合は、 +generic_test.hpp+ ヘッダにある `protest::generic::PreconditionAlwaysTrue`
+クラスのインスタンスを渡すことで、全ての場合にtrueを返します。
+わかりづらい、面倒だと思うのであれば、 `[](auto){ return true; }` を直接指定することもできます。
+
+[TIP]
+.テストオブジェクトを作らない理由
+================
+様々な型についてテストする場合、テストケース生成器は、テスト対象の型をパラメータとして受け取るtemplate templateである必要があります。
+もちろん型パラメータは実行時に動的に決定し指定することはできませんので、最初に指定することになります。
+
+xref:simpletest-param-table[`SimpleTest` で指定する情報]を参照すればわかりますが、テスト実行時まで決定を保留したい情報はテストケース生成器だけで、
+テストオブジェクトに保持するとすれば、事前条件と述語です。
+
+しかし、これらの関数は複数の(指定されたすべての)型について呼び出せる、つまりジェネリックである必要があります。
+よって、引数と戻り値の型は固定することができず、 `std::function<>` で保持することはできません。
+
+こうした理由により、テストオブジェクトを作っても保持できる情報はほとんど無いため、いきなり全てテスト実行時に指定する仕様になりました。
+
+================
+
+事前条件と述語をテストオブジェクト生成時に指定するのは今までどおりですが、これらは複数の型について動くものでなければなりません。
+よって、テンプレートテンプレートとして、実引数ではなく型パラメータで渡すことになります。
+
+テスト対象の型とテストケース生成器の実装は密接に関係していることが想定されるため、これらはどちらもテスト実行時に同時に指定します。
+
+`protest::passAsNthType()` についても説明しましょう。
+`SimpleTest` の場合ではテストケースの型がわかっていたため直接表示できましたが、 `generic::test()` では複数の型に対してのテストが一気に行われます。
+そのため、テストが失敗したとして、それがどのような型なのかコンパイル時にわからないのです。
+そこでこの関数が役に立ちます。
+
+`protest::passAsNthType<Tuple>(fun, obj, index)` は、 「 `ns_any::any` 型のオブジェクトである `obj` に、
+`Tuple` の `index` 番目の型が格納されているとしてその値を取り出し、 `fun` に渡す」という動作をします。
+この関数を使って、 `fun` をジェネリックな関数にしてやれば想定される全ての型のテストケースが問題なく表示できることでしょう。
+例のごとく、 `protest::overload()` も役に立つかもしれません。
+
+////
+// TODO: TMP用の機能は未実装
+==== テンプレートメタプログラミングの、実行時関数との比較
+
+`constexpr` の制限が緩和された{cpp}14以降において、MPLが必要な場面はそう多くないかもしれませんが、
+protestでは実行時関数との比較による簡単なテストにも対応しています。
+
++protest::mpl+ にはコンパイル時疑似乱数生成器を用意してあり、これを用いたコンパイル時テストケース生成と、実行時コードで同じテストケースを用いた結果を比較することでテストとします。
+
+コード例を見た方が早いでしょう。
+
+[source, c++]
+----
+----
+
+////

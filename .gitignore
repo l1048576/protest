@@ -1,5 +1,41 @@
 # Temporary files of editor
 .*.swp
 *~
-# Object files
-*.o
+
+# Object and binary files
+/*.o
+/*.lo
+/*.la
+protest_test
+
+# Automatically generated files
+/.deps
+/.libs
+/Makefile
+/Makefile.in
+/aclocal.m4
+/ar-lib
+/autom4te.cache
+/autoscan-*.log
+/compile
+/config.*
+/config.h
+/config.h.in
+# FIXME: Should `/configure' included in repository?
+#/configure
+/configure.scan
+/depcomp
+/docs/Doxyfile
+/install-sh
+/libtool
+/ltmain.sh
+/m4/libtool.m4
+/m4/ltoptions.m4
+/m4/ltsugar.m4
+/m4/ltversion.m4
+/m4/lt~obsolete.m4
+/missing
+/protest_test.*
+/stamp-h1
+/test-driver
+/test-suite.log

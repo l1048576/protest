@@ -24,8 +24,6 @@ cxxflags_warning += -Wformat-nonliteral
 
 if DEBUG
 
-cxxflags_base += -O0 -g3
-
 cxxflags_warning_dev =
 # -Wcast-align: より厳密なアライメントを要求する型へのポインタへのキャスト(char*からfloat*等)を警告する。
 cxxflags_warning_dev += -Wcast-align
@@ -48,14 +46,15 @@ else !DEBUG
 # elseの条件がifと非対称だった(否定でなかった)場合、エラーとなる。
 
 cxxflags_base += ${cxxflags_warning}
-AM_CXXFLAGS = ${cxxflags_base} ${AM_CXXFLAGS} -Iinclude
-
 endif !DEBUG
 
 TESTS = protest_test
 check_PROGRAMS = protest_test
 
 lib_LTLIBRARIES = libprotest.la
+
+AM_CXXFLAGS = ${cxxflags_base}
+AM_CPPFLAGS = -Iinclude
 
 protest_test_SOURCES = protest_test.cpp
 protest_test_LDADD = libprotest.la
